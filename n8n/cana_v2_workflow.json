@@ -1,0 +1,533 @@
+{
+  "name": "Cana V2 Lead Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cana-v2-lead",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        "responseMode": "responseNode"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "id": "cana-v2-webhook",
+      "name": "Lead Webhook",
+      "webhookId": "cana-v2-lead"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract form data from webhook\nconst body = $input.first().json.body || $input.first().json;\n\nconst firstName = body.FirstName || body.firstName || body['First Name'] || '';\nconst lastName = body.LastName || body.lastName || body['Last Name'] || '';\nconst email = body.Email || body.email || body.PersonalEmail || '';\nconst phone = body.Phone || body.phone || body.CellPhone || '';\nconst weddingDate = body['Wedding Date'] || body.weddingDate || body.WeddingDate || '';\nconst services = body.Selection || body.services || body.Notes || '';\nconst venue = body.Venue || body.venue || '';\nconst budget = body.Budget || body.budget || '';\nconst guestCount = body['Guest Count'] || body.guestCount || '';\n\nreturn [{\n  json: {\n    firstName,\n    lastName,\n    email,\n    phone: String(phone).replace(/\\D/g, ''),\n    weddingDate,\n    services,\n    venue,\n    budget,\n    guestCount,\n    fullName: `${firstName} ${lastName}`.trim()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300],
+      "id": "cana-v2-extract",
+      "name": "Extract Form Data"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://cana-lead-system-production.up.railway.app/api/leads",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ firstName: $json.firstName, lastName: $json.lastName, email: $json.email, phone: $json.phone, weddingDate: $json.weddingDate, services: $json.services, venue: $json.venue, budget: $json.budget, guestCount: $json.guestCount, value: '750' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "id": "cana-v2-create-lead",
+      "name": "Create Lead in App"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openphone.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: 'Hi ' + $('Extract Form Data').item.json.firstName + '! Thank you for submitting your request to the Cana Wedding Collective. Your information is being shared with our trades. You can expect them to reach out individually within 48 hours. -The Cana Wedding Collective', from: '+14056731410', to: ['+1' + $('Extract Form Data').item.json.phone] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 520],
+      "id": "cana-v2-sms-client",
+      "name": "SMS Client Confirmation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process the response from Create Lead in App\nconst leadResponse = $('Create Lead in App').first().json;\nconst formData = $('Extract Form Data').first().json;\n\nconst assignedVendors = leadResponse.assignedVendors || [];\n\n// Group vendors and create output items for each vendor\nconst vendorItems = [];\nconst seenVendors = new Set();\n\nfor (const v of assignedVendors) {\n  const key = v.email || v.id;\n  if (seenVendors.has(key)) continue;\n  seenVendors.add(key);\n  \n  vendorItems.push({\n    json: {\n      vendorFirstName: v.first_name,\n      vendorLastName: v.last_name,\n      vendorEmail: v.email,\n      vendorPhone: v.phone,\n      tradeType: v.trade_type,\n      leadUrl: v.lead_url,\n      clientName: formData.fullName,\n      clientPhone: formData.phone,\n      weddingDate: formData.weddingDate,\n      services: formData.services\n    }\n  });\n}\n\nif (vendorItems.length === 0) {\n  return [{ json: { noVendors: true } }];\n}\n\nreturn vendorItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300],
+      "id": "cana-v2-match-vendors",
+      "name": "Match Vendors"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cana-v2-if-vendors",
+              "leftValue": "={{ $json.noVendors }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notTrue"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300],
+      "id": "cana-v2-if-vendors",
+      "name": "Has Vendors?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openphone.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: 'New Cana Collective lead! ' + $json.clientName + ' (Wedding: ' + $json.weddingDate + ') needs ' + $json.tradeType + '. View details: ' + $json.leadUrl, from: '+14056731410', to: ['+1' + String($json.vendorPhone).replace(/\\\\D/g, '')] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 200],
+      "id": "cana-v2-sms-vendor",
+      "name": "SMS Vendor Lead Alert"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.vendorEmail }}",
+        "subject": "=New Cana Collective Lead - {{ $json.clientName }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;\">\n<div style=\"text-align: center; padding: 20px 0; border-bottom: 2px solid #F4C2C2;\">\n<h1 style=\"color: #000; font-size: 24px; margin: 0;\">Cana Wedding Collective</h1>\n<p style=\"color: #6B7280; font-size: 14px;\">New Lead Alert</p>\n</div>\n<div style=\"padding: 20px 0;\">\n<p>Hi {{ $json.vendorFirstName }},</p>\n<p>Great news! A new lead has come in that matches your <strong>{{ $json.tradeType }}</strong> services.</p>\n<table style=\"width: 100%; border-collapse: collapse; margin: 16px 0;\">\n<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee; color: #6B7280;\">Client</td><td style=\"padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;\">{{ $json.clientName }}</td></tr>\n<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee; color: #6B7280;\">Wedding Date</td><td style=\"padding: 8px; border-bottom: 1px solid #eee;\">{{ $json.weddingDate }}</td></tr>\n<tr><td style=\"padding: 8px; border-bottom: 1px solid #eee; color: #6B7280;\">Services</td><td style=\"padding: 8px; border-bottom: 1px solid #eee;\">{{ $json.services }}</td></tr>\n</table>\n<div style=\"text-align: center; margin: 24px 0;\">\n<a href=\"{{ $json.leadUrl }}\" style=\"background-color: #F4C2C2; color: #000; padding: 12px 32px; border-radius: 999px; text-decoration: none; font-weight: 500; display: inline-block;\">View Lead Details</a>\n</div>\n<p style=\"color: #6B7280; font-size: 14px;\">Please reach out to this client within 48 hours.</p>\n</div>\n<div style=\"border-top: 1px solid #eee; padding-top: 16px; text-align: center; color: #9CA3AF; font-size: 12px;\">\n<p>Cana Wedding Collective | canaok.com</p>\n</div>\n</div>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "Cana Wedding Collective",
+          "replyTo": "info@canaok.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1320, 400],
+      "id": "cana-v2-email-vendor",
+      "name": "Email Vendor Lead Alert"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Lead processed successfully' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1540, 300],
+      "id": "cana-v2-respond",
+      "name": "Respond Success"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cana-v2-code-keyword",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        "responseMode": "responseNode"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 700],
+      "id": "cana-v2-code-webhook",
+      "name": "CODE Keyword Webhook",
+      "webhookId": "cana-v2-code-keyword"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://cana-lead-system-production.up.railway.app/api/code-keyword",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ from: $json.body.from || $json.body.From, text: $json.body.text || $json.body.Text || $json.body.content || $json.body.Body }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 700],
+      "id": "cana-v2-code-handler",
+      "name": "Handle CODE Keyword"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, 700],
+      "id": "cana-v2-code-respond",
+      "name": "Respond CODE Result"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "cana-read-trades",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 1000],
+      "id": "cana-v2-read-trades-wh",
+      "name": "Read Trades Webhook",
+      "webhookId": "cana-read-trades"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "dataTableId": {
+          "__rl": true,
+          "value": "9e2xKbaOVQiRVao1",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [440, 1000],
+      "id": "cana-v2-read-trades",
+      "name": "Read Trades Table"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst data = items.map(item => item.json);\nreturn [{ json: { data } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 1000],
+      "id": "cana-v2-aggregate-trades",
+      "name": "Aggregate Trades"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 1000],
+      "id": "cana-v2-respond-trades",
+      "name": "Respond Trades"
+    },
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "cana-read-leads",
+        "options": {},
+        "responseMode": "responseNode"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 1200],
+      "id": "cana-v2-read-leads-wh",
+      "name": "Read Leads Webhook",
+      "webhookId": "cana-read-leads"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "dataTableId": {
+          "__rl": true,
+          "value": "NypivyIriTTZeVAJ",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [440, 1200],
+      "id": "cana-v2-read-leads",
+      "name": "Read Leads Table"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst data = items.map(item => item.json);\nreturn [{ json: { data } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 1200],
+      "id": "cana-v2-aggregate-leads",
+      "name": "Aggregate Leads"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 1200],
+      "id": "cana-v2-respond-leads",
+      "name": "Respond Leads"
+    }
+  ],
+  "connections": {
+    "Lead Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Form Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Form Data": {
+      "main": [
+        [
+          {
+            "node": "Create Lead in App",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "SMS Client Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Lead in App": {
+      "main": [
+        [
+          {
+            "node": "Match Vendors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Vendors": {
+      "main": [
+        [
+          {
+            "node": "Has Vendors?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Vendors?": {
+      "main": [
+        [
+          {
+            "node": "SMS Vendor Lead Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Vendor Lead Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMS Vendor Lead Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Vendor Lead Alert": {
+      "main": [
+        []
+      ]
+    },
+    "CODE Keyword Webhook": {
+      "main": [
+        [
+          {
+            "node": "Handle CODE Keyword",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle CODE Keyword": {
+      "main": [
+        [
+          {
+            "node": "Respond CODE Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Trades Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Trades Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Trades Table": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Trades",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Trades": {
+      "main": [
+        [
+          {
+            "node": "Respond Trades",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Leads Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Leads Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Leads Table": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Leads": {
+      "main": [
+        [
+          {
+            "node": "Respond Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
