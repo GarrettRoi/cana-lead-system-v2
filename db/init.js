@@ -131,12 +131,27 @@ function initTables() {
       FOREIGN KEY (vendor_id) REFERENCES vendors(id)
     );
 
+    -- Review redirect tracking (Vows & Vinyl)
+    CREATE TABLE IF NOT EXISTS review_clicks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token TEXT UNIQUE NOT NULL,
+      client_name TEXT,
+      bride_phone TEXT,
+      groom_phone TEXT,
+      email TEXT,
+      event_date TEXT,
+      clicked INTEGER DEFAULT 0,
+      clicked_at TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_lead_vendors_lead ON lead_vendors(lead_id);
     CREATE INDEX IF NOT EXISTS idx_lead_vendors_vendor ON lead_vendors(vendor_id);
     CREATE INDEX IF NOT EXISTS idx_lead_vendors_page_token ON lead_vendors(page_token);
     CREATE INDEX IF NOT EXISTS idx_vendors_token ON vendors(token);
     CREATE INDEX IF NOT EXISTS idx_ratings_token ON ratings(token);
     CREATE INDEX IF NOT EXISTS idx_vendor_categories ON vendor_categories(vendor_id, category_id);
+    CREATE INDEX IF NOT EXISTS idx_review_clicks_token ON review_clicks(token);
   `);
 
   // Seed default categories from known Trade_Types

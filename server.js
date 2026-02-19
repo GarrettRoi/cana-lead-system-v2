@@ -21,6 +21,11 @@ getDb();
 app.use('/', require('./routes/pages'));
 app.use('/api', require('./routes/api'));
 
+// Review redirect tracking (Vows & Vinyl)
+const { redirectRouter, apiRouter } = require('./routes/review');
+app.use('/review', redirectRouter);        // GET /review/:token -> redirect to Google
+app.use('/api/review', apiRouter);         // POST /api/review/create, GET /api/review/:token/status, GET /api/review/all
+
 // Startup sync from n8n
 syncFromN8n().then(() => {
   console.log('Initial n8n sync complete');
