@@ -12,7 +12,7 @@ const QUO_FROM = process.env.QUO_FROM_NUMBER || '+14056731410';
 // ============ AUTH ============
 function requireAdmin(req, res, next) {
   const token = req.cookies?.admin_token;
-  if (token === (process.env.ADMIN_PASSWORD || 'cana2025admin')) {
+  if (token === (process.env.ADMIN_PASSWORD)) {
     return next();
   }
   return res.status(401).json({ error: 'Unauthorized' });
@@ -20,7 +20,7 @@ function requireAdmin(req, res, next) {
 
 router.post('/admin/login', (req, res) => {
   const { password } = req.body;
-  if (password === (process.env.ADMIN_PASSWORD || 'cana2025admin')) {
+  if (password === (process.env.ADMIN_PASSWORD)) {
     res.cookie('admin_token', password, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax' });
     return res.json({ success: true });
   }

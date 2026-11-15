@@ -7,7 +7,7 @@ const BASE_URL = process.env.BASE_URL || 'https://cana-lead-system-production.up
 
 // ============ HOME / LOGIN ============
 router.get('/', (req, res) => {
-  const isLoggedIn = req.cookies?.admin_token === (process.env.ADMIN_PASSWORD || 'cana2025admin');
+  const isLoggedIn = req.cookies?.admin_token === (process.env.ADMIN_PASSWORD);
   if (isLoggedIn) return res.redirect('/admin/dashboard');
 
   const html = layout('Login', `
@@ -35,7 +35,7 @@ router.get('/', (req, res) => {
 
 // ============ ADMIN DASHBOARD ============
 router.get('/admin/dashboard', (req, res) => {
-  const isLoggedIn = req.cookies?.admin_token === (process.env.ADMIN_PASSWORD || 'cana2025admin');
+  const isLoggedIn = req.cookies?.admin_token === (process.env.ADMIN_PASSWORD);
   if (!isLoggedIn) return res.redirect('/');
 
   const tab = req.query.tab || 'overview';
@@ -60,7 +60,7 @@ router.get('/admin/dashboard', (req, res) => {
 
 // ============ LEAD DETAIL (admin) ============
 router.get('/admin/lead/:id', (req, res) => {
-  const isLoggedIn = req.cookies?.admin_token === (process.env.ADMIN_PASSWORD || 'cana2025admin');
+  const isLoggedIn = req.cookies?.admin_token === (process.env.ADMIN_PASSWORD);
   if (!isLoggedIn) return res.redirect('/');
 
   const html = layout('Lead Detail', `
@@ -83,7 +83,7 @@ router.get('/admin/lead/:id', (req, res) => {
 
 // ============ VENDOR DETAIL (admin) ============
 router.get('/admin/vendor/:id', (req, res) => {
-  const isLoggedIn = req.cookies?.admin_token === (process.env.ADMIN_PASSWORD || 'cana2025admin');
+  const isLoggedIn = req.cookies?.admin_token === (process.env.ADMIN_PASSWORD);
   if (!isLoggedIn) return res.redirect('/');
 
   const html = layout('Vendor Detail', `
